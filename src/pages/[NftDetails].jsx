@@ -2,6 +2,17 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useRouter } from "next/router";
 // import LoadingModal from "./LoadingModal";
+import { parseEther } from "ethers/lib/utils";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { PaymasterMode } from "@biconomy/paymaster";
+
+import {
+  MARKETPLACE_CONTRACT_ABI,
+  MARKETPLACE_CONTRACT_ADDRESS,
+} from "@/components/constants";
+import { useSelector } from "react-redux";
+import { ethers } from "ethers";
 
 const NftDetailPage = () => {
   const [data, setData] = useState({});
@@ -13,7 +24,13 @@ const NftDetailPage = () => {
   const [ipfsHash, setIpfsHash] = useState();
   const [title, setTitle] = useState();
   const [openInputModal, setOpenInputModal] = useState(false);
+  const [smartAccount, setSmartAccount] = useState({});
   // const [openLoader, setOpenLoader] = useState(true);
+
+  const SmartAccount = useSelector(
+    (state) => state.smartAccount.value.smartAccount
+  );
+  console.log("Smart Account", SmartAccount);
 
   const sellerAddress = "0xCDeD68e89f67d6262F82482C2710Ddd52492808a";
 
@@ -31,6 +48,7 @@ const NftDetailPage = () => {
           setContractAddress(res.data.contractAddress);
           setTokenId(res.data.tokenId);
           setPrice(res.data.price.toString());
+          setOwnerAddress(res.data.ownerAddress);
         });
     } catch (error) {
       console.log({ error });
@@ -38,116 +56,204 @@ const NftDetailPage = () => {
   }
   useEffect(() => {
     console.log("check", data);
-    console.log("router", router);
-
+    console.log("router query", router.query.NftDetails);
+    // console.log(
+    //   "conditiobns ",
+    //   SmartAccount.address.toLowerCase() ===
+    //     ownerAddress.toString().toLowerCase()
+    // );
+    console.log(SmartAccount.address);
+    console.log(ownerAddress);
+    console.log(tokenId);
     fetchData();
-    setOwnerAddress(localStorage.getItem("address"));
+    // setOwnerAddress(localStorage.getItem("address"));
+    // setSmartAccount(JSON.parse(localStorage.getItem("smartAccount")));
+    // console.log("Smart Account", SmartAccount);
+
+    // console.log("smart Account ", smartAccount);
     // listingSuccess && window.location.reload();
   }, []);
 
-  // Write contract Function
-  // const { config } = usePrepareContractWrite({
-  //   address: "0xCDeD68e89f67d6262F82482C2710Ddd52492808a",
-  //   abi: Marketplace.abi,
-  //   functionName: "purchaseNft",
-  //   args: [tokenId, contractAddress],
-  //   value: parseEther(price),
-  // });
-  // const {
-  //   data: dataNft,
-  //   isLoading,
-  //   isSuccess,
-  //   write: buyingNftFromContract,
-  // } = useContractWrite(config);
+  // ------------------------------------------------
+  // ------------- Buying Nft -----------------------
+  // ------------------------------------------------
 
-  // const {
-  //   data: waitData,
-  //   isError: waitError,
-  //   isSuccess: txIsSuccess,
-  // } = useWaitForTransaction({
-  //   hash: dataNft?.hash,
-  //   onSuccess: async () => {
-  //     await axios
-  //       .put(`http://localhost:5004/nfts/updatenft/${params._id}`, {
-  //         ownerAddress,
-  //         active: false,
-  //       })
-  //       .then((result) => console.log(result.data));
-  //     window.location.reload();
-  //   },
-  // });
+  const buyNft = async (e) => {
+    e.preventDefault();
+    if (localStorage.getItem("address") === "undefined") {
+      return alert("Please login first");
+    }
+    const MarketplaceContract = new ethers.Contract(
+      MARKETPLACE_CONTRACT_ADDRESS,
+      MARKETPLACE_CONTRACT_ABI,
+      SmartAccount.provider
+    );
+    try {
+      toast.info("Transferring Nft to your address...", {
+        position: "top-right",
+        autoClose: 15000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+      const buyTx = await MarketplaceContract.populateTransaction.purchaseNft(
+        tokenId,
+        contractAddress
+      );
+      console.log("Purchasing tx", buyTx.data);
 
-  // const txIsSuccessed = txIsSuccess;
+      const tx1 = {
+        to: MARKETPLACE_CONTRACT_ADDRESS,
+        data: buyTx.data,
+        value: parseEther(price),
+      };
 
-  // const buyingIsSuccess = txIsSuccess;
+      console.log("here before userop");
+      let userOp = await SmartAccount.buildUserOp([tx1]);
+      console.log({ userOp });
+      const biconomyPaymaster = SmartAccount.paymaster;
+      console.log(biconomyPaymaster);
+      console.log(SmartAccount);
+      let paymasterServiceData = {
+        mode: PaymasterMode.SPONSORED,
+        // calculateGasLimits: true,
+      };
+      console.log("Hello");
+      const paymasterAndDataResponse =
+        await biconomyPaymaster.getPaymasterAndData(
+          userOp,
+          paymasterServiceData
+        );
+      console.log("Hello2");
 
-  // const buyNft = async () => {
-  //   if (localStorage.getItem("address") === "undefined") {
-  //     return alert("Please connect your wallet");
-  //   }
-  //   console.log("Hello");
+      userOp.paymasterAndData = paymasterAndDataResponse.paymasterAndData;
+      console.log("Hello3");
+      const userOpResponse = await SmartAccount.sendUserOp(userOp);
+      console.log("Hello4");
+      console.log("userOpHash", userOpResponse);
+      const { receipt } = await userOpResponse.wait(1);
+      console.log("txHash", receipt.transactionHash);
+      toast.success(
+        await axios
+          .put(
+            `http://localhost:5004/nfts/updatenft/${router.query.NftDetails}`,
+            {
+              ownerAddress,
+              active: false,
+            }
+          )
+          .then((result) => console.log(result.data)),
+        `Success! Here is your transaction:${receipt.transactionHash} `,
+        {
+          position: "top-right",
+          autoClose: 18000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        },
+        console.log("Before api")
+      );
 
-  //   try {
-  //     buyingNftFromContract();
-  //   } catch (error) {
-  //     console.log({ error });
-  //   }
+      // window.location.reload();
+    } catch (err) {
+      console.error(err);
+      console.log(err);
+    }
+  };
 
-  //   console.log("initiate");
-  // };
+  const listingNft = async (e) => {
+    e.preventDefault();
+    const contract = new ethers.Contract(
+      MARKETPLACE_CONTRACT_ADDRESS,
+      MARKETPLACE_CONTRACT_ABI,
+      SmartAccount.provider
+    );
+    try {
+      toast.info("Listing your NFT to our Marketplace...", {
+        position: "top-right",
+        autoClose: 15000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+      const listTx = await contract.populateTransaction.listNft(
+        contractAddress,
+        tokenId,
+        price
+      );
+      console.log("listing data", listTx.data);
+      console.log("Token Id = ", tokenId);
+      console.log("Price", parseEther(price.toString()));
+      console.log("Contract Address", contractAddress);
 
-  // const { config: listConfig } = usePrepareContractWrite({
-  //   address: "0xcded68e89f67d6262f82482c2710ddd52492808a",
-  //   abi: Marketplace.abi,
-  //   functionName: "listNft",
-  //   value: parseEther("0.0025"),
-  //   args: [
-  //     "0x43c99947D6E25497Dc69351FaBb3025F7ACC2A6b",
-  //     tokenId,
-  //     parseEther(price),
-  //   ],
-  // });
-  // const {
-  //   data: listData,
-  //   isLoading: listIsLoading,
-  //   isSuccess: listIsSuccess,
-  //   write: listMyNft,
-  // } = useContractWrite(listConfig);
+      const tx1 = {
+        to: MARKETPLACE_CONTRACT_ADDRESS,
+        data: listTx.data,
+        value: parseEther("0.0025"),
+      };
+      console.log("here before userop");
+      let userOp = await SmartAccount.buildUserOp([tx1]);
+      console.log({ userOp });
+      const biconomyPaymaster = SmartAccount.paymaster;
+      console.log("biconomy paymaster ", biconomyPaymaster);
+      console.log("Smart Account ", SmartAccount);
+      let paymasterServiceData = {
+        mode: PaymasterMode.SPONSORED,
+        // calculateGasLimits: true,
+      };
+      console.log("Hello");
+      const paymasterAndDataResponse =
+        await biconomyPaymaster.getPaymasterAndData(
+          userOp,
+          paymasterServiceData
+        );
+      console.log("Hello2");
 
-  // const {
-  //   data: listWaitData,
-  //   isError: listWaitError,
-  //   isSuccess: listTxIsSuccess,
-  // } = useWaitForTransaction({
-  //   hash: listData?.hash,
-  //   onSuccess: async () => {
-  //     console.log("function before on success");
-  //     await axios
-  //       .put(`http://localhost:5004/nfts/updatenft/${params._id}`, {
-  //         price,
-  //         active: true,
-  //       })
-  //       .then((result) => console.log(result));
-  //     console.log("Function on success completed");
-  //     window.location.reload();
-  //   },
-  // });
-
-  // const listingSuccess = listTxIsSuccess;
-
-  // const listingNft = async (e) => {
-  //   e.preventDefault();
-  //   console.log("before try");
-  //   try {
-  //     console.log("Before list function");
-  //     // console.log(listTxIsSuccess);
-
-  //     listMyNft();
-  //     console.log("after list");
-  //   } catch (error) {
-  //     alert("Error--", error);
-  //   }
-  // };
+      userOp.paymasterAndData = paymasterAndDataResponse.paymasterAndData;
+      console.log("Hello3");
+      const userOpResponse = await SmartAccount.sendUserOp(userOp);
+      console.log("Hello4");
+      console.log("userOpHash", userOpResponse);
+      const { receipt } = await userOpResponse.wait(1);
+      console.log("txHash", receipt.transactionHash);
+      console.log("Contract run");
+      toast.success(
+        `Success Listing! Here is your transaction:${receipt.transactionHash} `,
+        {
+          position: "top-right",
+          autoClose: 18000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        },
+        await axios
+          .put(
+            `http://localhost:5004/nfts/updatenft/${router.query.NftDetails}`,
+            {
+              price,
+              active: true,
+            }
+          )
+          .then((result) => console.log(result)),
+        setOpenApproveModal(!openApproveModal)
+      );
+    } catch (err) {
+      console.error(err);
+      console.log(err);
+    }
+  };
 
   return (
     <>
@@ -180,7 +286,7 @@ const NftDetailPage = () => {
                 <span className="title-font font-medium text-2xl text-gray-900">
                   Eth {data.price}
                 </span>
-                {/* {data.ownerAddress === localStorage.getItem("address") ? (
+                {SmartAccount.address === ownerAddress ? (
                   ""
                 ) : (
                   <button
@@ -190,7 +296,7 @@ const NftDetailPage = () => {
                     Buy Nft
                   </button>
                 )}
-                {!data.active ? (
+                {!data.active && SmartAccount.address === ownerAddress ? (
                   <button
                     className="flex ml-auto text-white bg-red-500 border-0 py-2 px-6 focus:outline-none hover:bg-red-600 rounded"
                     onClick={() => setOpenInputModal(!openInputModal)}
@@ -199,13 +305,14 @@ const NftDetailPage = () => {
                   </button>
                 ) : (
                   ""
-                )} */}
+                )}
               </div>
             </div>
           </div>
           {/* {openLoader && <LoadingModal />} */}
         </div>
       </section>
+      <ToastContainer />
       {openInputModal && (
         <div className="flex flex-wrap min-h-screen w-full content-center justify-center py-10 modal fixed">
           <div className="flex shadow-md">
@@ -237,7 +344,7 @@ const NftDetailPage = () => {
                     />
                   </div>
 
-                  {/* <div className="mb-3">
+                  <div className="mb-3">
                     <button
                       className="mb-1.5 block w-full text-center text-white bg-red-500 hover:bg-red-600 px-2 py-1.5 rounded-md"
                       onClick={listingNft}
@@ -250,7 +357,7 @@ const NftDetailPage = () => {
                     >
                       X
                     </button>
-                  </div> */}
+                  </div>
                 </form>
               </div>
             </div>

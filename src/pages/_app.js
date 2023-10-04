@@ -4,6 +4,8 @@ import "@/styles/globals.css";
 import "../components/navbar.css";
 import "./mint.module.css";
 import "@biconomy/web3-auth/dist/src/style.css";
+import { store } from "../redux/store";
+import { Provider } from "react-redux";
 
 // const Navbar = dynamic(
 //   () => import("../components/Navbar").then((res) => res.default),
@@ -12,9 +14,8 @@ import "@biconomy/web3-auth/dist/src/style.css";
 
 export default function App({ Component, pageProps }) {
   return (
-    <>
-      {/* <Navbar /> */}
+    <Provider store={store}>
       <Component {...pageProps} />
-    </>
+    </Provider>
   );
 }

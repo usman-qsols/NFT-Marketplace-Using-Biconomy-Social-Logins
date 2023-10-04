@@ -7,7 +7,14 @@ import Transfer from "./Transfer";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import Logo from "../utilities/logoImage.png";
-
+// import { useDispatch } from "react-redux";
+// import { AppDispatch, useAppSelector } from "@/redux/store";
+// import { SetSmartAccount } from "@/redux/Features/smart-Account-slice";
+import { useSelector, useDispatch } from "react-redux";
+import {
+  removeSmartAccount,
+  SetSmartAccount,
+} from "@/redux/Features/smart-Account-slice";
 import {
   BiconomySmartAccount,
   BiconomySmartAccountConfig,
@@ -21,6 +28,9 @@ export default function Wallet() {
   const [loading, setLoading] = useState(false);
   const [, setProvider] = useState();
   const [smartAccount, setSmartAccount] = useState();
+
+  const dispatch = useDispatch();
+  // const count = useSelector((state) => state.smartAccount.value.smartAccount);
 
   const router = useRouter();
 
@@ -79,8 +89,9 @@ export default function Wallet() {
 
       // Save the smart account to a state variable
       setSmartAccount(smartAccount);
+      dispatch(SetSmartAccount(smartAccount));
       localStorage.setItem("address", smartAccount.address);
-      localStorage.setItem("smartAccount", smartAccount);
+      localStorage.setItem("smartAccount", JSON.stringify(smartAccount));
     } catch (e) {
       console.error(e);
     }
@@ -98,6 +109,7 @@ export default function Wallet() {
     // Reset state and stop the interval if it was started
     setSmartAccount(undefined);
     localStorage.setItem("address", undefined);
+    dispatch(removeSmartAccount());
 
     enableInterval(false);
   }

@@ -4,6 +4,7 @@ import Image from "next/image";
 // import { useNavigate } from "react-router-dom";
 import bulb from "../utilities/bulb.png";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import MintNft from "@/pages/Mint";
 
 const Introduction = ({ smartAccount }) => {
@@ -38,12 +39,11 @@ const Introduction = ({ smartAccount }) => {
               ownership.
             </h3>
 
-            <button
-              className="mt-10 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 px-4 py-2 font-medium  transition-colors hover:from-green-500 hover:to-blue-600"
-              onClick={() => isWalletConnected("/listnft")}
-            >
-              List your NFT
-            </button>
+            {/* <Link href="/ListNft">
+              <button className="mt-10 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 px-4 py-2 font-medium  transition-colors hover:from-green-500 hover:to-blue-600">
+                List your NFT
+              </button>
+            </Link> */}
 
             {/* <button
               className="mt-10 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 px-4 py-2 font-medium  transition-colors hover:from-green-500 hover:to-blue-600"
