@@ -10,9 +10,13 @@ import { PaymasterMode } from "@biconomy/paymaster";
 import {
   MARKETPLACE_CONTRACT_ABI,
   MARKETPLACE_CONTRACT_ADDRESS,
+  NFT_CONTRACT_ABI,
+  NFT_CONTRACT_ADDRESS,
 } from "@/components/constants";
 import { useSelector } from "react-redux";
 import { ethers } from "ethers";
+import NFTListModal from "@/pages/NFTListModal";
+import Link from "next/link";
 
 const NftDetailPage = () => {
   const [data, setData] = useState({});
@@ -22,7 +26,7 @@ const NftDetailPage = () => {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState();
   const [ipfsHash, setIpfsHash] = useState();
-  const [title, setTitle] = useState();
+  const [approvedModal, setApprovedModal] = useState(false);
   const [openInputModal, setOpenInputModal] = useState(false);
   const [smartAccount, setSmartAccount] = useState({});
   // const [openLoader, setOpenLoader] = useState(true);
@@ -31,6 +35,8 @@ const NftDetailPage = () => {
     (state) => state.smartAccount.value.smartAccount
   );
   console.log("Smart Account", SmartAccount);
+  const newOwnerAddress = SmartAccount.address;
+  console.log("Owner New Address", newOwnerAddress);
 
   const sellerAddress = "0xCDeD68e89f67d6262F82482C2710Ddd52492808a";
 
@@ -137,15 +143,6 @@ const NftDetailPage = () => {
       const { receipt } = await userOpResponse.wait(1);
       console.log("txHash", receipt.transactionHash);
       toast.success(
-        await axios
-          .put(
-            `http://localhost:5004/nfts/updatenft/${router.query.NftDetails}`,
-            {
-              ownerAddress,
-              active: false,
-            }
-          )
-          .then((result) => console.log(result.data)),
         `Success! Here is your transaction:${receipt.transactionHash} `,
         {
           position: "top-right",
@@ -157,10 +154,98 @@ const NftDetailPage = () => {
           progress: undefined,
           theme: "dark",
         },
-        console.log("Before api")
+        await axios
+          .put(
+            `http://localhost:5004/nfts/updatenft/${router.query.NftDetails}`,
+            {
+              ownerAddress: newOwnerAddress,
+              active: false,
+            }
+          )
+          .then((result) => console.log("Result", result.data)),
+        console.log("After api")
       );
 
       // window.location.reload();
+    } catch (err) {
+      console.error(err);
+      console.log(err);
+    }
+  };
+
+  const approveContracts = async (e) => {
+    e.preventDefault();
+    const nftContract = new ethers.Contract(
+      NFT_CONTRACT_ADDRESS,
+      NFT_CONTRACT_ABI,
+      SmartAccount.provider
+    );
+
+    try {
+      toast.info("Approving Marketplace to sell your Nft on your behalf...", {
+        position: "top-right",
+        autoClose: 20000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+      const approveMarketplaceTx =
+        await nftContract.populateTransaction.setApprovalForAll(
+          "0xcded68e89f67d6262f82482c2710ddd52492808a",
+          true
+        );
+      console.log("approving tx", approveMarketplaceTx.data);
+
+      const tx1 = {
+        to: NFT_CONTRACT_ADDRESS,
+        data: approveMarketplaceTx.data,
+      };
+
+      const approveNftContract =
+        await nftContract.populateTransaction.setApprovalForAll(
+          "0x43c99947D6E25497Dc69351FaBb3025F7ACC2A6b",
+          true
+        );
+
+      console.log("approveNftContract data ", approveNftContract.data);
+
+      const tx2 = {
+        to: NFT_CONTRACT_ADDRESS,
+        data: approveNftContract.data,
+      };
+
+      console.log("here before userop");
+      let userOp = await SmartAccount.buildUserOp([tx1, tx2]);
+      console.log({ userOp });
+      const biconomyPaymaster = SmartAccount.paymaster;
+      console.log(biconomyPaymaster);
+      console.log(SmartAccount);
+      let paymasterServiceData = {
+        mode: PaymasterMode.SPONSORED,
+        // calculateGasLimits: true,
+      };
+      console.log("Hello");
+      const paymasterAndDataResponse =
+        await biconomyPaymaster.getPaymasterAndData(
+          userOp,
+          paymasterServiceData
+        );
+      console.log("Hello2");
+
+      userOp.paymasterAndData = paymasterAndDataResponse.paymasterAndData;
+      console.log("Hello3");
+      const userOpResponse = await SmartAccount.sendUserOp(userOp);
+      console.log("Hello4");
+      console.log("userOpHash", userOpResponse);
+      const { receipt } = await userOpResponse.wait(1);
+      console.log("txHash", receipt.transactionHash);
+      toast.success(
+        setApprovedModal(!approvedModal),
+        setOpenInputModal(!openInputModal)
+      );
     } catch (err) {
       console.error(err);
       console.log(err);
@@ -188,7 +273,7 @@ const NftDetailPage = () => {
       const listTx = await contract.populateTransaction.listNft(
         contractAddress,
         tokenId,
-        price
+        parseEther(price)
       );
       console.log("listing data", listTx.data);
       console.log("Token Id = ", tokenId);
@@ -242,12 +327,13 @@ const NftDetailPage = () => {
           .put(
             `http://localhost:5004/nfts/updatenft/${router.query.NftDetails}`,
             {
-              price,
+              price: price,
               active: true,
             }
           )
           .then((result) => console.log(result)),
-        setOpenApproveModal(!openApproveModal)
+        console.log("After Api Call")
+        // setOpenApproveModal(!openApproveModal)
       );
     } catch (err) {
       console.error(err);
@@ -286,7 +372,7 @@ const NftDetailPage = () => {
                 <span className="title-font font-medium text-2xl text-gray-900">
                   Eth {data.price}
                 </span>
-                {SmartAccount.address === ownerAddress ? (
+                {newOwnerAddress === ownerAddress || !data.active ? (
                   ""
                 ) : (
                   <button
@@ -296,10 +382,11 @@ const NftDetailPage = () => {
                     Buy Nft
                   </button>
                 )}
+
                 {!data.active && SmartAccount.address === ownerAddress ? (
                   <button
                     className="flex ml-auto text-white bg-red-500 border-0 py-2 px-6 focus:outline-none hover:bg-red-600 rounded"
-                    onClick={() => setOpenInputModal(!openInputModal)}
+                    onClick={() => setApprovedModal(!approvedModal)}
                   >
                     Re-sell
                   </button>
@@ -311,59 +398,88 @@ const NftDetailPage = () => {
           </div>
           {/* {openLoader && <LoadingModal />} */}
         </div>
-      </section>
-      <ToastContainer />
-      {openInputModal && (
-        <div className="flex flex-wrap min-h-screen w-full content-center justify-center py-10 modal fixed">
-          <div className="flex shadow-md">
-            <div className="flex flex-wrap content-center justify-center rounded-md bg-white w-[24rem] h-[24rem] border border-red-500 border-dashed">
-              <div className="w-72">
-                <h1 className="text-xl font-semibold">Welcome back</h1>
-                <small className="text-gray-400">
-                  Welcome back! Please enter the price on which you want to
-                  re-sell your nft
-                </small>
+        {openInputModal && (
+          <div className="justify-center items-center flex overflow-x-hidden overflow-y-auto fixed inset-0 z-50 outline-none focus:outline-none">
+            <div className="flex shadow-md">
+              <div className="flex flex-wrap content-center justify-center rounded-l-md bg-white w-[24rem] h-[24rem] border border-red-500 border-dashed">
+                <div className="w-72">
+                  <h1 className="text-xl font-semibold">Welcome back</h1>
+                  <small className="text-gray-400">
+                    Welcome back! Please enter the price on which you want to
+                    re-sell your nft
+                  </small>
 
-                <form className="mt-4">
-                  <div className="mb-3">
-                    <label className="mb-2 block text-xs font-semibold">
-                      Price
-                    </label>
-                    <input
-                      placeholder="Enter Price"
-                      class="block w-full rounded-md border border-gray-300 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 py-1 px-1.5 text-gray-500"
-                      onChange={(e) => {
-                        if (isNaN(e.target.value)) {
-                          alert("You can only write price in numbers");
-                          e.target.value = ""; // Clear the input field
-                        } else {
-                          setPrice(e.target.value);
-                        }
-                      }}
-                      required={true}
-                    />
-                  </div>
+                  <form className="mt-4">
+                    <div className="mb-3">
+                      <label className="mb-2 block text-xs font-semibold">
+                        Price
+                      </label>
+                      <input
+                        placeholder="Enter Price"
+                        class="block w-full rounded-md border border-gray-300 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 py-1 px-1.5 text-gray-500"
+                        onChange={(e) => {
+                          if (isNaN(e.target.value)) {
+                            alert("You can only write price in numbers");
+                            e.target.value = ""; // Clear the input field
+                          } else {
+                            setPrice(e.target.value);
+                          }
+                        }}
+                        required={true}
+                      />
+                    </div>
 
-                  <div className="mb-3">
-                    <button
-                      className="mb-1.5 block w-full text-center text-white bg-red-500 hover:bg-red-600 px-2 py-1.5 rounded-md"
-                      onClick={listingNft}
-                    >
-                      {listIsLoading ? "Waiting for the approval.." : "List"}
-                    </button>
-                    <button
-                      className="mb-1.5 block w-[30px] text-center text-white bg-red-500 hover:bg-red-600 px-2 py-1.5 rounded-md"
-                      onClick={() => setOpenInputModal(!openInputModal)}
-                    >
-                      X
-                    </button>
-                  </div>
-                </form>
+                    <div className="mb-3">
+                      <button
+                        className="mb-1.5 block w-full text-center text-white bg-red-500 hover:bg-red-600 px-2 py-1.5 rounded-md"
+                        onClick={listingNft}
+                      >
+                        List My Nft
+                      </button>
+                      <button
+                        className="mb-1.5 block w-[30px] text-center text-white bg-red-500 hover:bg-red-600 px-2 py-1.5 rounded-md"
+                        onClick={() => setOpenInputModal(!openInputModal)}
+                      >
+                        X
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {approvedModal && (
+          <div className="justify-center items-center flex overflow-x-hidden overflow-y-auto fixed inset-0 z-50 outline-none focus:outline-none">
+            <div className="flex shadow-md">
+              <div className="flex flex-wrap content-center justify-center rounded-l-md bg-white w-[23rem] h-[14rem] border border-purple-600 border-dashed">
+                <div className="w-72">
+                  <h1 className="text-xl font-semibold">
+                    Approve CryptoCrafters
+                  </h1>
+                  <small className="text-gray-400">
+                    Welcome back! You should approve Marketplace to sell your
+                    NFT on your behalf
+                  </small>
+
+                  <form className="mt-4">
+                    <div className="mb-3">
+                      <button
+                        className="mb-1.5 block w-full text-center text-white bg-purple-600 hover:bg-purple-900 px-2 py-1.5 rounded-md"
+                        onClick={approveContracts}
+                      >
+                        Approve Marketplace
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+      <ToastContainer />
     </>
   );
 };

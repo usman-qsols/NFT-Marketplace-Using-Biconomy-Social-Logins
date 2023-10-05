@@ -43,12 +43,16 @@ export default function Wallet() {
       const signature1 = await socialLoginSDK.whitelistUrl(
         "https://biconomy-social-logins-git-master-usman-2000.vercel.app"
       );
+      const signature2 = await socialLoginSDK.whitelistUrl(
+        "http://localhost:3000/"
+      );
       await socialLoginSDK.init({
         chainId: ethers.utils.hexValue(ChainId.POLYGON_MUMBAI).toString(),
         network: "testnet",
         whitelistUrls: {
           "https://biconomy-social-logins-git-master-usman-2000.vercel.app":
             signature1,
+          "http://localhost:3000/": signature2,
         },
       });
       sdkRef.current = socialLoginSDK;
@@ -157,7 +161,9 @@ export default function Wallet() {
               Welcome to CryptoCrafters NFT Marketplace
             </h1>
 
-            <p>Please login, to enter in the Marketplace</p>
+            <p className=" text-gray-50 font-bold tracking-tight lg:text-5xl">
+              Please login, to enter in the Marketplace
+            </p>
             <button
               onClick={login}
               className="mt-10 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 px-4 py-2 font-medium  transition-colors hover:from-green-500 hover:to-blue-600"
@@ -168,7 +174,11 @@ export default function Wallet() {
         )}
 
         {/* Loading state */}
-        {loading && <p>Loading account details...</p>}
+        {loading && (
+          <p className=" text-gray-50 font-bold tracking-tight lg:text-5xl">
+            Loading account details...
+          </p>
+        )}
 
         {smartAccount && (
           <div className="flex flex-col h-[100%]">
